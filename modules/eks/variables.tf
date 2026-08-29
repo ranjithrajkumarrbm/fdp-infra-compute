@@ -117,3 +117,33 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# --- AWS Load Balancer Controller ------------------------------------- #
+variable "region" {
+  description = "AWS region the cluster runs in (used by the AWS Load Balancer Controller)."
+  type        = string
+}
+
+variable "enable_alb_controller" {
+  description = "Install the AWS Load Balancer Controller (IRSA role + IAM policy + Helm release + internal-ALB security group)."
+  type        = bool
+  default     = true
+}
+
+variable "alb_controller_chart_version" {
+  description = "Version of the aws-load-balancer-controller Helm chart (https://aws.github.io/eks-charts)."
+  type        = string
+  default     = "1.13.3"
+}
+
+variable "alb_allowed_cidrs" {
+  description = "CIDRs allowed to reach the internal ALB frontend security group. Empty => the VPC CIDR."
+  type        = list(string)
+  default     = []
+}
+
+variable "alb_listener_ports" {
+  description = "TCP ports opened on the internal ALB frontend security group for clients."
+  type        = list(number)
+  default     = [80, 443]
+}

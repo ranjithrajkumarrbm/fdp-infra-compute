@@ -52,3 +52,24 @@ output "node_group_names" {
   description = "Names of the managed node groups."
   value       = [for ng in aws_eks_node_group.this : ng.node_group_name]
 }
+
+# --- AWS Load Balancer Controller ------------------------------------- #
+output "alb_controller_role_arn" {
+  description = "IRSA role ARN assumed by the AWS Load Balancer Controller (null when disabled)."
+  value       = local.alb_controller_enabled ? aws_iam_role.alb_controller[0].arn : null
+}
+
+output "alb_controller_iam_policy_arn" {
+  description = "ARN of the AWS Load Balancer Controller IAM policy (null when disabled)."
+  value       = local.alb_controller_enabled ? aws_iam_policy.alb_controller[0].arn : null
+}
+
+output "alb_security_group_id" {
+  description = "Frontend security group ID for the internal ALBs. Attach to Ingresses and reuse for API Gateway VPC Link."
+  value       = local.alb_controller_enabled ? aws_security_group.alb[0].id : null
+}
+
+output "alb_ingress_class_name" {
+  description = "IngressClass name that provisions an internal ALB (empty when disabled)."
+  value       = local.alb_controller_enabled ? "alb" : ""
+}
