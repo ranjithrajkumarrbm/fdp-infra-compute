@@ -49,6 +49,9 @@ locals {
           disk_size      = 50
         }
       }
+
+      # Internal ALB (aws-load-balancer-controller). Empty => the VPC CIDR.
+      alb_allowed_cidrs = []
     }
 
     prod = {
@@ -70,6 +73,10 @@ locals {
           disk_size      = 50
         }
       }
+
+      # Internal ALB (aws-load-balancer-controller). Empty => the VPC CIDR.
+      # Tighten to the API Gateway VPC Link / consumer ranges outside dev.
+      alb_allowed_cidrs = []
     }
   }
 
@@ -105,6 +112,23 @@ provider "aws" {
 
   default_tags {
     tags = local.common_tags
+  }
+}
+
+# Helm provider for the AWS Load Balancer Controller. Authenticates to the
+# cluster the module creates with a short-lived token from `aws eks get-token`
+# (the `aws` CLI is on PATH locally and on the CI runners; the credentials that
+# run terraform are cluster admin via bootstrap_cluster_creator_admin_permissions).
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", local.region]
+    }
   }
 }
 
@@ -148,6 +172,10 @@ module "eks" {
 
   node_groups    = local.env.node_groups
   access_entries = local.access_entries
+
+  # AWS Load Balancer Controller - internal ALB from Kubernetes Ingress.
+  region            = local.region
+  alb_allowed_cidrs = local.env.alb_allowed_cidrs
 
   create_admin_role             = true
   admin_role_trusted_principals = var.eks_admin_trusted_principals

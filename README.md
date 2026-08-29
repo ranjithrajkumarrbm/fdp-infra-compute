@@ -9,11 +9,12 @@ repo's remote state for the cluster endpoint, CA data and OIDC provider ARN.
 ## Layout
 
 ```
-eks_main.tf              root: locals (dev/prod config sets), provider, VPC remote state, module call
+eks_main.tf              root: locals (dev/prod config sets), aws + helm providers, VPC remote state, module call
 backend.tf               S3 backend — bucket + region hardcoded, key passed at init
-versions.tf              required_version >= 1.10.0; aws ~> 5.60, tls ~> 4.0
-outputs.tf               re-exported module outputs + resource_prefix
+versions.tf              required_version >= 1.10.0; aws ~> 5.60, tls ~> 4.0, helm ~> 2.17
+outputs.tf               re-exported module outputs + resource_prefix + ALB / VPC Link prerequisites
 modules/eks/             cluster + node groups + IRSA/OIDC + access entries + core addons
+modules/eks/alb_controller.tf   AWS Load Balancer Controller: IRSA role + IAM policy + Helm release + internal-ALB SG + subnet tags
 .github/workflows/       plan / apply / destroy pipelines
 ```
 
@@ -31,10 +32,11 @@ modules/eks/             cluster + node groups + IRSA/OIDC + access entries + co
 
 | | dev | prod |
 |---|---|---|
-| Node instance type | `t3.medium` | `t3.large` |
+| Node instance type | `c7i-flex.large` | `c7i-flex.large` |
 | desired / min / max | 2 / 2 / 4 | 3 / 3 / 6 |
 | Public API endpoint | open (`0.0.0.0/0`) | restricted (`public_access_cidrs`) |
 | Kubernetes version | 1.31 | 1.31 |
+| Internal ALB client CIDRs (`alb_allowed_cidrs`) | `[]` → VPC CIDR | `[]` → VPC CIDR (tighten to VPC Link / consumer ranges) |
 
 ## Module (`modules/eks/`)
 
@@ -55,6 +57,68 @@ modules/eks/             cluster + node groups + IRSA/OIDC + access entries + co
   output. Add `local.access_entries` entries for any further principals.
 - Whoever runs `terraform apply` (the CI keys) is also made cluster admin via
   `bootstrap_cluster_creator_admin_permissions`.
+
+## AWS Load Balancer Controller (internal ALB)
+
+`modules/eks/alb_controller.tf` installs the [AWS Load Balancer
+Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)
+(Helm chart `aws-load-balancer-controller`, default `1.13.3` / app `v2.13.3`)
+so a Kubernetes **Ingress** provisions an **internal** ALB in the VPC private
+application subnets. It creates:
+
+| Resource | Name | Purpose |
+|---|---|---|
+| IAM policy | `fdp-<env>-euw2-eks-alb-controller` | AWS-published controller policy (`modules/eks/alb_controller_iam_policy.json`) |
+| IAM role (IRSA) | `fdp-<env>-euw2-eks-alb-controller` | Trusts the cluster OIDC provider for `kube-system/aws-load-balancer-controller` |
+| Helm release | `aws-load-balancer-controller` (ns `kube-system`) | The controller + an `alb` `IngressClass` / `IngressClassParams` with `scheme: internal` |
+| Security group | `fdp-<env>-euw2-eks-alb-internal` | Frontend SG for the internal ALBs; consumed by the app repo and by API Gateway VPC Link |
+| SG rules | on the SG above + the EKS cluster SG | Clients → ALB on `alb_listener_ports` (80/443); ALB → node targets (`tcp 1025-65535`) |
+| Subnet tags | `kubernetes.io/role/internal-elb = 1` on each private app subnet | Lets the controller auto-discover subnets for an internal LB |
+
+The controller only manages load balancers when an Ingress/Service asks for one —
+**it does not create the Fraud Service `Deployment` / `Service` / `Ingress`**,
+which stay in the application repo.
+
+### Module variables
+
+| Variable | Default | Notes |
+|---|---|---|
+| `enable_alb_controller` | `true` | Set `false` to skip the controller, SG and tags entirely |
+| `alb_controller_chart_version` | `"1.13.3"` | Helm chart version |
+| `alb_allowed_cidrs` | `[]` | Client CIDRs allowed to the internal ALB frontend SG; empty ⇒ the VPC CIDR |
+| `alb_listener_ports` | `[80, 443]` | Ports opened on the frontend SG |
+
+### Application repo contract (Fraud Service Ingress)
+
+The Ingress in the app repo must set:
+
+```yaml
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/security-groups: <alb_security_group_id>   # this repo's output
+    alb.ingress.kubernetes.io/target-type: ip                            # route straight to pods
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'            # or HTTP:80
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  ingressClassName: alb        # => internal ALB via the IngressClassParams
+```
+
+`scheme: internal` comes from the `IngressClassParams` this repo creates, so it
+does not need to be set per-Ingress. Because the Ingress pins an explicit
+frontend SG, this repo (not the controller) owns the SG rule from that SG to the
+nodes — do **not** set `alb.ingress.kubernetes.io/manage-backend-security-group-rules`.
+
+### Downstream: API Gateway HTTP API + VPC Link
+
+VPC Link (v2) needs subnet + security-group IDs, exported here as
+`private_app_subnet_ids` and `alb_security_group_id` (reuse the same SG). The
+**ALB listener ARN** is created by the app repo's Ingress, not this repo —
+read it at runtime:
+
+```bash
+aws elbv2 describe-load-balancers \
+  --query "LoadBalancers[?contains(DNSName, 'internal-')].[LoadBalancerArn,DNSName,Scheme]" --output table
+```
 
 ## Prerequisites
 
@@ -93,6 +157,34 @@ aws sts assume-role --role-arn "$(terraform output -raw eks_admin_role_arn)" --r
 aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 ```
 
+`terraform apply` also installs the AWS Load Balancer Controller via Helm, so the
+credentials running Terraform must reach the cluster API (`aws` CLI on PATH; the
+CI keys are cluster admin via `bootstrap_cluster_creator_admin_permissions`). If
+the very first apply cannot reach a brand-new cluster, split it:
+
+```bash
+terraform apply -var="environment=dev" -target=module.eks.aws_eks_cluster.this -target=module.eks.aws_eks_node_group.this
+terraform apply -var="environment=dev"     # controller + SG on the second pass
+# or set enable_alb_controller=false for the first apply, then flip it back
+```
+
+### Validate the internal ALB path
+
+```bash
+# controller is running and the internal IngressClass exists
+kubectl -n kube-system rollout status deploy/aws-load-balancer-controller
+kubectl get ingressclass alb
+kubectl get ingressclassparams alb -o jsonpath='{.spec.scheme}{"\n"}'   # -> internal
+
+# after the application repo deploys the Fraud Service Ingress:
+kubectl get ingress -A
+kubectl get ingress <name> -n <ns> -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}'
+#   -> internal-<...>.eu-west-2.elb.amazonaws.com   (name starts with "internal-")
+
+aws elbv2 describe-load-balancers \
+  --query "LoadBalancers[?contains(DNSName,'internal-')].[LoadBalancerName,Scheme,VpcId]" --output table
+```
+
 ## CI/CD
 
 All three workflows are **manual only** (`workflow_dispatch`) with a `dev`/`prod`
@@ -120,7 +212,11 @@ gh workflow run terraform-apply.yml -f environment=dev
 
 ## Outputs
 
-`cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`
+Cluster: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`
 (sensitive), `cluster_version`, `cluster_security_group_id`,
 `oidc_provider_arn`, `oidc_provider_url`, `node_iam_role_arn`,
-`eks_admin_role_arn`, `kubeconfig_command`, `resource_prefix`.
+`eks_admin_role_arn`, `kubeconfig_command`, `resource_prefix`, `aws_region`.
+
+Load balancer / VPC Link prerequisites for downstream repos:
+`alb_controller_role_arn`, `alb_ingress_class_name` (`alb`),
+`alb_security_group_id`, `vpc_id`, `private_app_subnet_ids`.
