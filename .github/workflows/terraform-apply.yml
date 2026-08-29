@@ -1,0 +1,75 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.tf"
+      - ".github/workflows/terraform-apply.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to apply
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  TF_STATE_KEY_PREFIX: fdp-infra-compute
+  TERRAFORM_VERSION: "1.10.5"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # push to main -> dev. Manual runs choose the environment.
+    # Attach required-reviewer protection to the `prod` GitHub Environment.
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    concurrency:
+      group: tf-${{ github.event.inputs.environment || 'dev' }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve target environment
+        id: env
+        run: echo "name=${{ github.event.inputs.environment || 'dev' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init -input=false \
+            -backend-config="key=${TF_STATE_KEY_PREFIX}/${{ steps.env.outputs.name }}/terraform.tfstate"
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      - name: Terraform apply
+        run: |
+          terraform apply -input=false -auto-approve -lock-timeout=5m \
+            -var="environment=${{ steps.env.outputs.name }}"
+
+      - name: Terraform outputs
+        if: always()
+        run: |
+          {
+            echo "### Terraform Apply - \`${{ steps.env.outputs.name }}\`"
+            echo '```'
+            terraform output -no-color 2>/dev/null || echo "(no outputs)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
