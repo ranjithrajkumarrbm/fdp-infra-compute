@@ -46,8 +46,7 @@ modules/eks/             cluster + node groups + IRSA/OIDC + access entries + co
   `aws_eks_cluster` (`authentication_mode = "API"`, `api`/`audit`/`authenticator`
   logs), managed node groups from `var.node_groups` in the VPC private app
   subnets, `aws_eks_access_entry` + policy associations (no `aws-auth`
-  ConfigMap), managed addons `vpc-cni` / `coredns` / `kube-proxy` /
-  `aws-ebs-csi-driver`.
+  ConfigMap), managed addons `vpc-cni` / `coredns` / `kube-proxy`.
 - **Cluster admin** — the module creates a dedicated IAM role
   `fdp-<env>-euw2-eks-admin` (`create_admin_role = true`) and wires it to the
   `AmazonEKSClusterAdminPolicy` access entry. Its trust policy defaults to the
