@@ -88,10 +88,9 @@ variable "addons" {
   description = "EKS managed addons: name => version. Use null for the EKS-default version."
   type        = map(string)
   default = {
-    vpc-cni            = null
-    coredns            = null
-    kube-proxy         = null
-    aws-ebs-csi-driver = null
+    vpc-cni    = null
+    coredns    = null
+    kube-proxy = null
   }
 }
 
