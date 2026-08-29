@@ -1,0 +1,29 @@
+# Local .terraform directories
+**/.terraform/*
+
+# Keep .terraform.lock.hcl committed for reproducible provider versions.
+
+# State files (remote backend only)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash / plan artifacts
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+plan_output.txt
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# CLI config / override files
+.terraformrc
+terraform.rc
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
