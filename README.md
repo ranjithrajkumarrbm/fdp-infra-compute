@@ -98,7 +98,7 @@ aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 
 | Workflow | Trigger | Action |
 |---|---|---|
-| `terraform-plan.yml` | PR to `main` (matrix dev + prod); manual dispatch | `fmt -check` → `init` → `validate` → `plan`, posted as a PR comment |
+| `terraform-plan.yml` | PR to `main` (dev only); manual dispatch (pick env, incl. prod) | `fmt -check` → `init` → `validate` → `plan`, posted as a PR comment |
 | `terraform-apply.yml` | push to `main` → `dev`; manual dispatch picks env | `init` → `validate` → `apply -auto-approve` |
 | `terraform-destroy.yml` | manual dispatch only | requires `confirm` input `== "destroy"`, then `destroy` |
 

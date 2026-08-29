@@ -28,7 +28,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Manual run -> just the chosen env. Pull request -> both dev and prod.
+  # Manual run -> just the chosen env. Pull request -> dev only
+  # (run the plan workflow manually with environment=prod to plan prod).
   matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -39,7 +40,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo 'environments=["${{ inputs.environment }}"]' >> "$GITHUB_OUTPUT"
           else
-            echo 'environments=["dev","prod"]' >> "$GITHUB_OUTPUT"
+            echo 'environments=["dev"]' >> "$GITHUB_OUTPUT"
           fi
 
   plan:
