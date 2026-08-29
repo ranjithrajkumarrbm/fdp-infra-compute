@@ -101,6 +101,18 @@ variable "access_entries" {
   default     = {}
 }
 
+variable "create_admin_role" {
+  description = "Create a dedicated IAM role wired to the AmazonEKSClusterAdminPolicy access entry."
+  type        = bool
+  default     = true
+}
+
+variable "admin_role_trusted_principals" {
+  description = "Principal ARNs allowed to assume the dedicated admin role. Empty => the account root."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags applied to all resources created by this module."
   type        = map(string)

@@ -57,7 +57,8 @@ locals {
 
       endpoint_public_access = true
       # prod: lock the public API endpoint to office / VPN egress ranges.
-      public_access_cidrs = ["REPLACE-vpn-or-office-cidr/32"]
+      #public_access_cidrs = ["REPLACE-vpn-or-office-cidr/32"]
+      public_access_cidrs = ["10.0.0.0/20"]
 
       node_groups = {
         general = {
@@ -83,10 +84,20 @@ locals {
     Repository  = "fdp-infra-compute"
   }
 
-  # Cluster admins granted via EKS access entries (no aws-auth ConfigMap).
-  access_entries = {
-    "REPLACE-admin-role-arn" = ["arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"]
-  }
+  # Extra EKS access entries (no aws-auth ConfigMap). The dedicated cluster-admin
+  # role is created by the module and wired up automatically - add entries here
+  # only for additional principals: { "<principal-arn>" = ["<policy-arn>", ...] }.
+  access_entries = {}
+}
+
+# Principal ARNs allowed to assume the dedicated cluster-admin role the module
+# creates. Leave empty to trust the account root (any principal in the account
+# whose IAM policy permits sts:AssumeRole on the role); set it to specific IAM
+# user / SSO role ARNs to lock it down.
+variable "eks_admin_trusted_principals" {
+  description = "Principal ARNs allowed to assume the EKS cluster-admin role. Empty => account root."
+  type        = list(string)
+  default     = []
 }
 
 provider "aws" {
@@ -137,6 +148,9 @@ module "eks" {
 
   node_groups    = local.env.node_groups
   access_entries = local.access_entries
+
+  create_admin_role             = true
+  admin_role_trusted_principals = var.eks_admin_trusted_principals
 
   tags = local.common_tags
 }

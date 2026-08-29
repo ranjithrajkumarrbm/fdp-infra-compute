@@ -39,6 +39,11 @@ output "node_iam_role_arn" {
   value       = module.eks.node_iam_role_arn
 }
 
+output "eks_admin_role_arn" {
+  description = "ARN of the dedicated cluster-admin role. Assume this, then run the kubeconfig command."
+  value       = module.eks.admin_role_arn
+}
+
 output "kubeconfig_command" {
   description = "Run this to configure kubectl."
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${local.region}"
