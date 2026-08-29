@@ -48,8 +48,14 @@ modules/eks/             cluster + node groups + IRSA/OIDC + access entries + co
   subnets, `aws_eks_access_entry` + policy associations (no `aws-auth`
   ConfigMap), managed addons `vpc-cni` / `coredns` / `kube-proxy` /
   `aws-ebs-csi-driver`.
-- Cluster admin is granted to the principal ARN in
-  `local.access_entries` via `AmazonEKSClusterAdminPolicy`.
+- **Cluster admin** — the module creates a dedicated IAM role
+  `fdp-<env>-euw2-eks-admin` (`create_admin_role = true`) and wires it to the
+  `AmazonEKSClusterAdminPolicy` access entry. Its trust policy defaults to the
+  account root; set `eks_admin_trusted_principals` to specific IAM user / SSO
+  role ARNs to restrict who may assume it. Its ARN is the `eks_admin_role_arn`
+  output. Add `local.access_entries` entries for any further principals.
+- Whoever runs `terraform apply` (the CI keys) is also made cluster admin via
+  `bootstrap_cluster_creator_admin_permissions`.
 
 ## Prerequisites
 
@@ -61,12 +67,15 @@ modules/eks/             cluster + node groups + IRSA/OIDC + access entries + co
   (same AWS account as the networking repo — the CI keys already used there need
   no extra IAM).
 
-## Fill these placeholders before applying
+## Before applying
 
-| File | Placeholder | Value |
+Nothing is strictly required — the cluster-admin role is created for you and
+trusts the account root by default. Optional hardening:
+
+| File | Setting | Why |
 |---|---|---|
-| `eks_main.tf` → `locals.access_entries` | `REPLACE-admin-role-arn` | IAM/SSO role ARN to grant cluster admin |
-| `eks_main.tf` → `env_configs.prod.public_access_cidrs` | `REPLACE-vpn-or-office-cidr/32` | Office / VPN CIDR(s) |
+| `eks_main.tf` → `var.eks_admin_trusted_principals` | list of IAM user / SSO role ARNs | Restrict who can assume the cluster-admin role (default: account root) |
+| `eks_main.tf` → `env_configs.prod.public_access_cidrs` | office / VPN CIDR(s) | Currently `10.0.0.0/20`; set to your real egress ranges |
 
 ## Usage
 
@@ -80,7 +89,8 @@ terraform apply -var="environment=dev"
 terraform init -reconfigure -backend-config="key=fdp-infra-compute/prod/terraform.tfstate"
 terraform plan -var="environment=prod"
 
-# post-apply
+# post-apply: assume the admin role, then point kubectl at the cluster
+aws sts assume-role --role-arn "$(terraform output -raw eks_admin_role_arn)" --role-session-name admin
 aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 ```
 
@@ -105,4 +115,4 @@ aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`
 (sensitive), `cluster_version`, `cluster_security_group_id`,
 `oidc_provider_arn`, `oidc_provider_url`, `node_iam_role_arn`,
-`kubeconfig_command`, `resource_prefix`.
+`eks_admin_role_arn`, `kubeconfig_command`, `resource_prefix`.

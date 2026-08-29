@@ -91,7 +91,7 @@ resource "aws_eks_node_group" "this" {
 ###############################################################################
 
 resource "aws_eks_access_entry" "this" {
-  for_each = var.access_entries
+  for_each = local.all_access_entries
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = each.key
@@ -102,7 +102,7 @@ resource "aws_eks_access_entry" "this" {
 resource "aws_eks_access_policy_association" "this" {
   for_each = {
     for pair in flatten([
-      for principal, policies in var.access_entries : [
+      for principal, policies in local.all_access_entries : [
         for policy in policies : {
           key       = "${principal}|${policy}"
           principal = principal
