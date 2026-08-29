@@ -41,7 +41,7 @@ locals {
 
       node_groups = {
         general = {
-          instance_types = ["t3.medium"]
+          instance_types = ["c7i-flex.large"]
           capacity_type  = "ON_DEMAND"
           desired_size   = 2
           min_size       = 2
@@ -62,7 +62,7 @@ locals {
 
       node_groups = {
         general = {
-          instance_types = ["t3.large"]
+          instance_types = ["c7i-flex.large"]
           capacity_type  = "ON_DEMAND"
           desired_size   = 3
           min_size       = 3

@@ -96,11 +96,21 @@ aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 
 ## CI/CD
 
+All three workflows are **manual only** (`workflow_dispatch`) with a `dev`/`prod`
+environment picker. Nothing runs on push or PR.
+
 | Workflow | Trigger | Action |
 |---|---|---|
-| `terraform-plan.yml` | PR to `main` (dev only); manual dispatch (pick env, incl. prod) | `fmt -check` → `init` → `validate` → `plan`, posted as a PR comment |
-| `terraform-apply.yml` | push to `main` → `dev`; manual dispatch picks env | `init` → `validate` → `apply -auto-approve` |
-| `terraform-destroy.yml` | manual dispatch only | requires `confirm` input `== "destroy"`, then `destroy` |
+| `terraform-plan.yml` | manual dispatch (pick env) | `fmt -check` → `init` → `validate` → `plan`; job summary |
+| `terraform-apply.yml` | manual dispatch (pick env) | `init` → `validate` → `apply -auto-approve`; outputs to summary |
+| `terraform-destroy.yml` | manual dispatch (pick env) | requires `confirm` input `== "destroy"`, then `destroy` |
+
+Run them from the **Actions** tab, or:
+
+```bash
+gh workflow run terraform-plan.yml  -f environment=dev
+gh workflow run terraform-apply.yml -f environment=dev
+```
 
 **Required GitHub config:**
 
@@ -108,7 +118,6 @@ aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
   Environment).
 - Environments `dev` and `prod`; add required reviewers to `prod` to gate
   `apply` / `destroy`.
-- Branch protection on `main` requiring the plan check.
 
 ## Outputs
 

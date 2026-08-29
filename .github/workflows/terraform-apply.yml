@@ -1,11 +1,6 @@
 name: Terraform Apply
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**.tf"
-      - ".github/workflows/terraform-apply.yml"
   workflow_dispatch:
     inputs:
       environment:
@@ -25,17 +20,13 @@ env:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    # push to main -> dev. Manual runs choose the environment.
-    # Attach required-reviewer protection to the `prod` GitHub Environment.
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    # Manual only. Attach required-reviewer protection to the `prod`
+    # GitHub Environment to gate applies.
+    environment: ${{ inputs.environment }}
     concurrency:
-      group: tf-${{ github.event.inputs.environment || 'dev' }}
+      group: tf-${{ inputs.environment }}
       cancel-in-progress: false
     steps:
-      - name: Resolve target environment
-        id: env
-        run: echo "name=${{ github.event.inputs.environment || 'dev' }}" >> "$GITHUB_OUTPUT"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -54,7 +45,7 @@ jobs:
       - name: Terraform init
         run: |
           terraform init -input=false \
-            -backend-config="key=${TF_STATE_KEY_PREFIX}/${{ steps.env.outputs.name }}/terraform.tfstate"
+            -backend-config="key=${TF_STATE_KEY_PREFIX}/${{ inputs.environment }}/terraform.tfstate"
 
       - name: Terraform validate
         run: terraform validate -no-color
@@ -62,13 +53,13 @@ jobs:
       - name: Terraform apply
         run: |
           terraform apply -input=false -auto-approve -lock-timeout=5m \
-            -var="environment=${{ steps.env.outputs.name }}"
+            -var="environment=${{ inputs.environment }}"
 
       - name: Terraform outputs
         if: always()
         run: |
           {
-            echo "### Terraform Apply - \`${{ steps.env.outputs.name }}\`"
+            echo "### Terraform Apply - \`${{ inputs.environment }}\`"
             echo '```'
             terraform output -no-color 2>/dev/null || echo "(no outputs)"
             echo '```'
