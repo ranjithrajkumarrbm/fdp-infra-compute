@@ -54,11 +54,9 @@ resource "aws_lb_target_group" "fraud" {
     path                = var.alb_health_check_path
     port                = "traffic-port"
     protocol            = "HTTP"
-    matcher             = "200-399"
+    matcher             = "200"
     healthy_threshold   = 2
     unhealthy_threshold = 3
-    interval            = 15
-    timeout             = 5
   }
 
   tags = var.tags
