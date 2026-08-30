@@ -147,3 +147,27 @@ variable "alb_listener_ports" {
   type        = list(number)
   default     = [80, 443]
 }
+
+variable "create_internal_alb" {
+  description = "Create a concrete internal ALB + listener(s) + target group in this repo (requires enable_alb_controller)."
+  type        = bool
+  default     = true
+}
+
+variable "alb_target_port" {
+  description = "Container port the internal ALB target group forwards to (the application pod port)."
+  type        = number
+  default     = 8080
+}
+
+variable "alb_health_check_path" {
+  description = "HTTP health-check path for the internal ALB target group."
+  type        = string
+  default     = "/healthz"
+}
+
+variable "alb_certificate_arn" {
+  description = "ACM certificate ARN for an HTTPS:443 listener on the internal ALB. Empty => HTTP:80 only."
+  type        = string
+  default     = ""
+}

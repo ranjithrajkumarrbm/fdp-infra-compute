@@ -66,23 +66,45 @@ output "alb_controller_role_arn" {
 }
 
 output "alb_ingress_class_name" {
-  description = "IngressClass name the application repo sets to get an internal ALB (e.g. \"alb\")."
+  description = "IngressClass name available for Ingress-driven ALBs (e.g. \"alb\"). The Fraud Service uses the target group below instead."
   value       = module.eks.alb_ingress_class_name
 }
 
 output "alb_security_group_id" {
   description = <<-EOT
-    Frontend security group for the internal ALBs. The application repo attaches
-    it to the Fraud Service Ingress via
-    `alb.ingress.kubernetes.io/security-groups`; reuse it as the API Gateway
-    VPC Link security group downstream.
+    Frontend security group attached to the internal ALB. Reuse it as the
+    API Gateway VPC Link security group downstream.
   EOT
   value       = module.eks.alb_security_group_id
 }
 
-# VPC Link (API Gateway HTTP API) prerequisites. The ALB listener ARN itself is
-# created by the application repo's Ingress and read at runtime with
-# `kubectl get ingress` / the ELBv2 API - it is not known to this repo.
+# --- Internal ALB (created here) ------------------------------------- #
+output "alb_arn" {
+  description = "ARN of the internal ALB."
+  value       = module.eks.alb_arn
+}
+
+output "alb_dns_name" {
+  description = "DNS name of the internal ALB (resolvable only inside the VPC)."
+  value       = module.eks.alb_dns_name
+}
+
+output "alb_zone_id" {
+  description = "Hosted zone ID of the internal ALB, for Route 53 alias records."
+  value       = module.eks.alb_zone_id
+}
+
+output "alb_listener_arn" {
+  description = "Listener ARN for the API Gateway HTTP API VPC Link integration (HTTPS:443 if a cert is set, else HTTP:80)."
+  value       = module.eks.alb_listener_arn
+}
+
+output "alb_target_group_arn" {
+  description = "Target group ARN the application repo binds Fraud Service pods to with a TargetGroupBinding (no Ingress required)."
+  value       = module.eks.alb_target_group_arn
+}
+
+# VPC Link (API Gateway HTTP API) prerequisites.
 output "vpc_id" {
   description = "VPC ID (for API Gateway VPC Link and other downstream consumers)."
   value       = data.terraform_remote_state.vpc.outputs.vpc_id
