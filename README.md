@@ -83,7 +83,7 @@ Two files provide the internal ingress path for the Fraud Service:
 | Subnet tags | `kubernetes.io/role/internal-elb = 1` on each private app subnet | Internal-LB subnet discovery |
 | **ALB** | `fdp-<env>-euw2-eks-int` | `internal`, `application`, in the private app subnets |
 | **Listener(s)** | HTTP:80 always; HTTPS:443 when `alb_certificate_arn` set | Default action → the target group below |
-| **Target group** | `fdp-<env>-euw2-eks-fraud` | `target_type = ip`, port `alb_target_port`, health check `alb_health_check_path` |
+| **Target group** | `fdp-<env>-euw2-eks-fraud` | `target_type = ip`, port `alb_target_port`, health check `alb_health_check_path` (expects HTTP 200) |
 
 **The Fraud Service `Deployment` / `Service` stay in the application repo.** This
 repo does not create them and does not create a Kubernetes `Ingress` for the
@@ -100,7 +100,7 @@ VPC Link listener ARN is stable across app deploys.
 | `alb_allowed_cidrs` | `[]` | Client CIDRs to the ALB frontend SG; empty ⇒ the VPC CIDR |
 | `alb_listener_ports` | `[80, 443]` | Ports opened on the frontend SG |
 | `alb_target_port` | `8080` | Pod container port the target group forwards to |
-| `alb_health_check_path` | `"/healthz"` | Target group health-check path |
+| `alb_health_check_path` | `"/actuator/health/readiness"` | Target group health-check path; must return HTTP 200 |
 | `alb_certificate_arn` | `""` | ACM ARN ⇒ adds an HTTPS:443 listener |
 
 ### Application repo contract (Fraud Service)
@@ -123,8 +123,9 @@ spec:
   targetType: ip
 ```
 
-The pod container must listen on `alb_target_port` (8080) and serve
-`alb_health_check_path` (`/healthz`).
+The pod container must listen on `alb_target_port` (8080) and return HTTP 200 on
+`alb_health_check_path` (`/actuator/health/readiness` - the Spring Boot Actuator
+readiness probe; expose it with `management.endpoint.health.probes.enabled=true`).
 
 ### Downstream: API Gateway HTTP API + VPC Link
 
@@ -199,7 +200,7 @@ aws elbv2 describe-target-health --region eu-west-2 \
   --query 'TargetHealthDescriptions[].TargetHealth.State'          # -> ["healthy", ...]
 
 # smoke test from inside the VPC (bastion / a pod):
-curl -sS "http://$(terraform output -raw alb_dns_name)/healthz"
+curl -sS "http://$(terraform output -raw alb_dns_name)/actuator/health/readiness"
 ```
 
 ## CI/CD
