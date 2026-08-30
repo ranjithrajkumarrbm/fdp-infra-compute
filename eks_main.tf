@@ -53,7 +53,7 @@ locals {
       # Internal ALB. alb_allowed_cidrs empty => the VPC CIDR.
       alb_allowed_cidrs     = []
       alb_target_port       = 8080
-      alb_health_check_path = "/healthz"
+      alb_health_check_path = "/actuator/health/readiness"
       alb_certificate_arn   = "" # set an ACM ARN to add an HTTPS:443 listener
     }
 
@@ -81,7 +81,7 @@ locals {
       # Tighten to the API Gateway VPC Link / consumer ranges outside dev.
       alb_allowed_cidrs     = []
       alb_target_port       = 8080
-      alb_health_check_path = "/healthz"
+      alb_health_check_path = "/actuator/health/readiness"
       alb_certificate_arn   = "" # set an ACM ARN to add an HTTPS:443 listener
     }
   }

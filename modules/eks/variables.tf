@@ -161,9 +161,9 @@ variable "alb_target_port" {
 }
 
 variable "alb_health_check_path" {
-  description = "HTTP health-check path for the internal ALB target group."
+  description = "HTTP health-check path for the internal ALB target group (expects HTTP 200)."
   type        = string
-  default     = "/healthz"
+  default     = "/actuator/health/readiness"
 }
 
 variable "alb_certificate_arn" {
