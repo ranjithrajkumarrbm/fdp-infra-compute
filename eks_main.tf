@@ -50,8 +50,11 @@ locals {
         }
       }
 
-      # Internal ALB (aws-load-balancer-controller). Empty => the VPC CIDR.
-      alb_allowed_cidrs = []
+      # Internal ALB. alb_allowed_cidrs empty => the VPC CIDR.
+      alb_allowed_cidrs     = []
+      alb_target_port       = 8080
+      alb_health_check_path = "/healthz"
+      alb_certificate_arn   = "" # set an ACM ARN to add an HTTPS:443 listener
     }
 
     prod = {
@@ -74,9 +77,12 @@ locals {
         }
       }
 
-      # Internal ALB (aws-load-balancer-controller). Empty => the VPC CIDR.
+      # Internal ALB. alb_allowed_cidrs empty => the VPC CIDR.
       # Tighten to the API Gateway VPC Link / consumer ranges outside dev.
-      alb_allowed_cidrs = []
+      alb_allowed_cidrs     = []
+      alb_target_port       = 8080
+      alb_health_check_path = "/healthz"
+      alb_certificate_arn   = "" # set an ACM ARN to add an HTTPS:443 listener
     }
   }
 
@@ -173,9 +179,14 @@ module "eks" {
   node_groups    = local.env.node_groups
   access_entries = local.access_entries
 
-  # AWS Load Balancer Controller - internal ALB from Kubernetes Ingress.
-  region            = local.region
-  alb_allowed_cidrs = local.env.alb_allowed_cidrs
+  # AWS Load Balancer Controller + internal ALB (listener/target group here;
+  # the Fraud Service workload + TargetGroupBinding stay in the app repo).
+  region                = local.region
+  alb_allowed_cidrs     = local.env.alb_allowed_cidrs
+  create_internal_alb   = true
+  alb_target_port       = local.env.alb_target_port
+  alb_health_check_path = local.env.alb_health_check_path
+  alb_certificate_arn   = local.env.alb_certificate_arn
 
   create_admin_role             = true
   admin_role_trusted_principals = var.eks_admin_trusted_principals

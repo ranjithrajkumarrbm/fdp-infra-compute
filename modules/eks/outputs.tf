@@ -73,3 +73,39 @@ output "alb_ingress_class_name" {
   description = "IngressClass name that provisions an internal ALB (empty when disabled)."
   value       = local.alb_controller_enabled ? "alb" : ""
 }
+
+# --- Internal ALB managed by this repo ------------------------------- #
+output "alb_arn" {
+  description = "ARN of the internal ALB (null when create_internal_alb = false)."
+  value       = local.create_alb ? aws_lb.internal[0].arn : null
+}
+
+output "alb_dns_name" {
+  description = "DNS name of the internal ALB (null when create_internal_alb = false)."
+  value       = local.create_alb ? aws_lb.internal[0].dns_name : null
+}
+
+output "alb_zone_id" {
+  description = "Hosted zone ID of the internal ALB, for Route 53 alias records."
+  value       = local.create_alb ? aws_lb.internal[0].zone_id : null
+}
+
+output "alb_listener_arn" {
+  description = "Listener ARN for API Gateway VPC Link (HTTPS:443 when a certificate is set, else HTTP:80)."
+  value       = local.create_alb ? (local.alb_https_enabled ? aws_lb_listener.https[0].arn : aws_lb_listener.http[0].arn) : null
+}
+
+output "alb_http_listener_arn" {
+  description = "HTTP:80 listener ARN of the internal ALB (null when create_internal_alb = false)."
+  value       = local.create_alb ? aws_lb_listener.http[0].arn : null
+}
+
+output "alb_https_listener_arn" {
+  description = "HTTPS:443 listener ARN of the internal ALB (null unless alb_certificate_arn is set)."
+  value       = local.alb_https_enabled ? aws_lb_listener.https[0].arn : null
+}
+
+output "alb_target_group_arn" {
+  description = "Target group ARN the application repo binds its Service pods to via a TargetGroupBinding."
+  value       = local.create_alb ? aws_lb_target_group.fraud[0].arn : null
+}
