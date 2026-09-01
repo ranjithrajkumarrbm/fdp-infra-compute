@@ -8,6 +8,13 @@ on:
         type: choice
         options: [dev, prod]
         default: dev
+      bootstrap:
+        description: >-
+          First create / full rebuild: apply the EKS cluster + node groups on
+          their own before the full apply, so the Helm provider has a reachable
+          cluster. Leave off for normal applies.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -49,6 +56,19 @@ jobs:
 
       - name: Terraform validate
         run: terraform validate -no-color
+
+      # Bootstrap phase: on a first create / full rebuild the Helm provider is
+      # configured from cluster outputs that are still "known after apply", so
+      # helm_release.alb_controller fails before the cluster exists. Applying the
+      # cluster + node groups first makes those outputs concrete for the full
+      # apply that follows.
+      - name: Terraform apply (bootstrap - cluster + node groups)
+        if: ${{ inputs.bootstrap }}
+        run: |
+          terraform apply -input=false -auto-approve -lock-timeout=5m \
+            -var="environment=${{ inputs.environment }}" \
+            -target=module.eks.aws_eks_cluster.this \
+            -target=module.eks.aws_eks_node_group.this
 
       - name: Terraform apply
         run: |
