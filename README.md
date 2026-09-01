@@ -36,7 +36,7 @@ modules/eks/alb.tf              internal ALB + HTTP/HTTPS listener + "ip" target
 | Node instance type | `c7i-flex.large` | `c7i-flex.large` |
 | desired / min / max | 2 / 2 / 4 | 3 / 3 / 6 |
 | Public API endpoint | open (`0.0.0.0/0`) | restricted (`public_access_cidrs`) |
-| Kubernetes version | 1.31 | 1.31 |
+| Kubernetes version | 1.34 | 1.34 |
 | Internal ALB client CIDRs (`alb_allowed_cidrs`) | `[]` → VPC CIDR | `[]` → VPC CIDR (tighten to VPC Link / consumer ranges) |
 
 ## Module (`modules/eks/`)
@@ -65,7 +65,7 @@ Two files provide the internal ingress path for the Fraud Service:
 
 - **`modules/eks/alb_controller.tf`** installs the [AWS Load Balancer
   Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/)
-  (Helm chart `aws-load-balancer-controller`, default `1.13.3` / app `v2.13.3`)
+  (Helm chart `aws-load-balancer-controller`, default `3.5.0` / app `v3.5.0`)
   with an IRSA role, plus the shared frontend security group, the SG rules, and
   the private-app-subnet discovery tags. It also registers an `alb`
   `IngressClass` (`scheme: internal`) for any *other* service that prefers the
@@ -95,7 +95,7 @@ VPC Link listener ARN is stable across app deploys.
 | Variable | Default | Notes |
 |---|---|---|
 | `enable_alb_controller` | `true` | Controller + SG + tags; required for `create_internal_alb` |
-| `alb_controller_chart_version` | `"1.13.3"` | Helm chart version |
+| `alb_controller_chart_version` | `"3.5.0"` | Helm chart version (v3+ chart version == controller app version) |
 | `create_internal_alb` | `true` | The ALB + listener(s) + target group |
 | `alb_allowed_cidrs` | `[]` | Client CIDRs to the ALB frontend SG; empty ⇒ the VPC CIDR |
 | `alb_listener_ports` | `[80, 443]` | Ports opened on the frontend SG |
@@ -202,6 +202,62 @@ aws elbv2 describe-target-health --region eu-west-2 \
 # smoke test from inside the VPC (bastion / a pod):
 curl -sS "http://$(terraform output -raw alb_dns_name)/actuator/health/readiness"
 ```
+
+## Kubernetes version
+
+Both environments run **1.34** (`env_configs.*.kubernetes_version`). 1.31–1.33
+are in EKS *extended* support and billed at the higher rate, so keep this within
+standard support.
+
+The managed addons (`vpc-cni`, `coredns`, `kube-proxy`) pass
+`addon_version = null`, so EKS resolves the default that matches the cluster
+version automatically — no per-addon bump needed.
+
+**Fresh cluster (current state — cluster + node groups were deleted manually):**
+just `terraform apply`; it creates the 1.34 control plane and 1.34 nodes in one
+pass. The AWS Load Balancer Controller Helm chart is `3.5.0` (v3 chart version
+tracks the app version) and ships its own CRDs on first install.
+
+**In-place minor bump (one minor at a time, e.g. 1.34 → 1.35 later):**
+
+```bash
+# 1. control plane first
+terraform apply -var="environment=dev" -target=module.eks.aws_eks_cluster.this
+# 2. then the node groups (rolling; respects max_unavailable_percentage = 33)
+terraform apply -var="environment=dev"
+```
+
+If you bump the controller chart across a major (v1.x → v3.x) on an existing
+cluster, re-apply its CRDs afterwards — `helm upgrade` does not:
+
+```bash
+kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master"
+```
+
+### Test the upgrade
+
+```bash
+aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
+
+terraform output cluster_version                       # -> 1.34
+aws eks describe-cluster --name fdp-dev-euw2-eks --region eu-west-2 \
+  --query 'cluster.{version:version,status:status}'    # -> 1.34 / ACTIVE
+
+kubectl version -o json | jq '.serverVersion.gitVersion'   # -> v1.34.x
+kubectl get nodes -o wide                                   # every node v1.34.x, Ready
+kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.kubeletVersion}{"\n"}{end}'
+
+# core components healthy on the new version
+kubectl -n kube-system get pods
+aws eks list-addons --cluster-name fdp-dev-euw2-eks --region eu-west-2
+kubectl -n kube-system rollout status deploy/aws-load-balancer-controller
+kubectl -n kube-system rollout status deploy/coredns
+
+kubectl get --raw='/readyz?verbose'                    # all checks ok
+kubectl run smoke --image=public.ecr.aws/amazonlinux/amazonlinux:2023 --rm -it --restart=Never -- /bin/true
+```
+
+Repeat with `environment=prod` after dev looks good.
 
 ## CI/CD
 
