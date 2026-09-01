@@ -10,7 +10,7 @@ variable "cluster_name" {
 }
 
 variable "kubernetes_version" {
-  description = "Kubernetes minor version for the control plane, e.g. \"1.31\"."
+  description = "Kubernetes minor version for the control plane, e.g. \"1.34\"."
   type        = string
 }
 
@@ -131,9 +131,9 @@ variable "enable_alb_controller" {
 }
 
 variable "alb_controller_chart_version" {
-  description = "Version of the aws-load-balancer-controller Helm chart (https://aws.github.io/eks-charts)."
+  description = "Version of the aws-load-balancer-controller Helm chart (https://aws.github.io/eks-charts). From v3.0.0 the chart version tracks the controller app version."
   type        = string
-  default     = "1.13.3"
+  default     = "3.5.0"
 }
 
 variable "alb_allowed_cidrs" {

@@ -34,7 +34,7 @@ locals {
   env_configs = {
     dev = {
       env_name           = "dev"
-      kubernetes_version = "1.31"
+      kubernetes_version = "1.34"
 
       endpoint_public_access = true
       public_access_cidrs    = ["0.0.0.0/0"] # dev: public endpoint open
@@ -59,7 +59,7 @@ locals {
 
     prod = {
       env_name           = "prod"
-      kubernetes_version = "1.31"
+      kubernetes_version = "1.34"
 
       endpoint_public_access = true
       # prod: lock the public API endpoint to office / VPN egress ranges.
