@@ -172,14 +172,22 @@ aws eks update-kubeconfig --name fdp-dev-euw2-eks --region eu-west-2
 
 `terraform apply` also installs the AWS Load Balancer Controller via Helm, so the
 credentials running Terraform must reach the cluster API (`aws` CLI on PATH; the
-CI keys are cluster admin via `bootstrap_cluster_creator_admin_permissions`). If
-the very first apply cannot reach a brand-new cluster, split it:
+CI keys are cluster admin via `bootstrap_cluster_creator_admin_permissions`).
+
+**First create / full rebuild:** the Helm provider is configured from cluster
+outputs that are still *"known after apply"* until the cluster exists, so
+`helm_release.alb_controller` fails on a from-scratch apply. Apply the cluster +
+node groups first, then everything else:
 
 ```bash
-terraform apply -var="environment=dev" -target=module.eks.aws_eks_cluster.this -target=module.eks.aws_eks_node_group.this
+terraform apply -var="environment=dev" \
+  -target=module.eks.aws_eks_cluster.this \
+  -target=module.eks.aws_eks_node_group.this
 terraform apply -var="environment=dev"     # controller + ALB on the second pass
-# or set enable_alb_controller=false for the first apply, then flip it back
 ```
+
+In CI, run **`terraform-apply.yml` with `bootstrap = true`** for that first run —
+it does the two applies in one job. Leave `bootstrap` off for every normal apply.
 
 ### Validate the internal ALB path
 
@@ -267,7 +275,7 @@ environment picker. Nothing runs on push or PR.
 | Workflow | Trigger | Action |
 |---|---|---|
 | `terraform-plan.yml` | manual dispatch (pick env) | `fmt -check` → `init` → `validate` → `plan`; job summary |
-| `terraform-apply.yml` | manual dispatch (pick env) | `init` → `validate` → `apply -auto-approve`; outputs to summary |
+| `terraform-apply.yml` | manual dispatch (pick env; `bootstrap` toggle) | `init` → `validate` → (`bootstrap`: targeted cluster + node-group apply) → `apply -auto-approve`; outputs to summary |
 | `terraform-destroy.yml` | manual dispatch (pick env) | requires `confirm` input `== "destroy"`, then `destroy` |
 
 Run them from the **Actions** tab, or:
@@ -275,6 +283,7 @@ Run them from the **Actions** tab, or:
 ```bash
 gh workflow run terraform-plan.yml  -f environment=dev
 gh workflow run terraform-apply.yml -f environment=dev
+gh workflow run terraform-apply.yml -f environment=dev -f bootstrap=true   # first create / full rebuild
 ```
 
 **Required GitHub config:**
